@@ -27,8 +27,18 @@ const pool = new Pool({
   port: 5432,
 });
 
+// RGPD : on ne journalise JAMAIS le contenu des requêtes (titres, prénoms...),
+// seulement le code et le message de l'erreur.
+function logError(err) {
+  console.error(`Erreur serveur (${err.code || 'inconnue'}) : ${err.message}`);
+}
+
 // ---------- Validation avec Joi ----------
 // Le contrôle du formulaire aide l'utilisateur ; seul celui-ci protège les données.
+
+// Prénom : lettres (accents compris), espaces, tirets et apostrophes uniquement.
+// Cela écarte chiffres, "@" et numéros de téléphone (minimisation).
+const NAME_PATTERN = /^[\p{L}][\p{L} '’-]*$/u;
 
 const titleSchema = Joi.string().trim().min(1).max(255).messages({
   'string.base': 'Le titre doit être du texte.',
@@ -42,13 +52,27 @@ const completedSchema = Joi.boolean().messages({
   'boolean.base': 'Le champ completed doit être un booléen.',
 });
 
+const assigneeSchema = Joi.string()
+  .trim()
+  .max(50)
+  .pattern(NAME_PATTERN)
+  .allow('', null) // vide ou null = pas de bénévole
+  .messages({
+    'string.base': 'Le prénom doit être du texte.',
+    'string.max': 'Le prénom ne doit pas dépasser 50 caractères.',
+    'string.pattern.base':
+      'Le prénom ne doit contenir que des lettres, espaces, tirets ou apostrophes.',
+  });
+
 const createTaskSchema = Joi.object({
   title: titleSchema.required(),
+  assignee: assigneeSchema,
 });
 
 const updateTaskSchema = Joi.object({
   title: titleSchema,
   completed: completedSchema,
+  assignee: assigneeSchema,
 }).min(1).messages({
   'object.min': 'Aucun champ à modifier.',
 });
@@ -85,7 +109,7 @@ app.get('/tasks', async (req, res) => {
     const result = await pool.query(sql);
     return res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    logError(err);
     return res.status(500).json({ error: 'Erreur serveur' });
   }
 });
@@ -107,7 +131,7 @@ app.get('/tasks/:id', async (req, res) => {
 
     return res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    logError(err);
     return res.status(500).json({ error: 'Erreur serveur' });
   }
 });
@@ -115,15 +139,16 @@ app.get('/tasks/:id', async (req, res) => {
 // POST /tasks
 app.post('/tasks', validate(createTaskSchema), async (req, res) => {
   const { title } = req.body;
+  const assignee = req.body.assignee || null;
 
   try {
     const result = await pool.query(
-      'INSERT INTO tasks (title) VALUES ($1) RETURNING *',
-      [title]
+      'INSERT INTO tasks (title, assignee) VALUES ($1, $2) RETURNING *',
+      [title, assignee]
     );
     return res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    logError(err);
     return res.status(500).json({ error: 'Erreur serveur' });
   }
 });
@@ -132,6 +157,10 @@ app.post('/tasks', validate(createTaskSchema), async (req, res) => {
 app.put('/tasks/:id', validate(updateTaskSchema), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { title, completed } = req.body;
+
+  // assignee absent = on ne touche pas ; "" ou null = on efface le prénom
+  const changeAssignee = 'assignee' in req.body;
+  const assignee = req.body.assignee || null;
 
   if (Number.isNaN(id)) {
     return res.status(404).json({ error: 'Tâche non trouvée.' });
@@ -142,10 +171,11 @@ app.put('/tasks/:id', validate(updateTaskSchema), async (req, res) => {
     const result = await pool.query(
       `UPDATE tasks
        SET title = COALESCE($1, title),
-           completed = COALESCE($2, completed)
-       WHERE id = $3
+           completed = COALESCE($2, completed),
+           assignee = CASE WHEN $3::boolean THEN $4::text ELSE assignee END
+       WHERE id = $5
        RETURNING *`,
-      [title ?? null, completed ?? null, id]
+      [title ?? null, completed ?? null, changeAssignee, assignee, id]
     );
 
     if (result.rows.length === 0) {
@@ -154,7 +184,7 @@ app.put('/tasks/:id', validate(updateTaskSchema), async (req, res) => {
 
     return res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    logError(err);
     return res.status(500).json({ error: 'Erreur serveur' });
   }
 });
@@ -179,12 +209,37 @@ app.patch('/tasks/:id/completed', async (req, res) => {
 
     return res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    logError(err);
     return res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-// DELETE /tasks/:id
+// DELETE /tasks/:id/assignee : droit à l'effacement du prénom (la tâche est conservée)
+app.delete('/tasks/:id/assignee', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+
+  if (Number.isNaN(id)) {
+    return res.status(404).json({ error: 'Tâche non trouvée.' });
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE tasks SET assignee = NULL WHERE id = $1 RETURNING *',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Tâche non trouvée.' });
+    }
+
+    return res.json(result.rows[0]);
+  } catch (err) {
+    logError(err);
+    return res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// DELETE /tasks/:id : supprime la tâche, et donc aussi le prénom qu'elle contient
 app.delete('/tasks/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
 
@@ -207,9 +262,23 @@ app.delete('/tasks/:id', async (req, res) => {
       task: result.rows[0],
     });
   } catch (err) {
-    console.error(err);
+    logError(err);
     return res.status(500).json({ error: 'Erreur serveur' });
   }
+});
+
+// Gestion des erreurs restantes (ex. JSON invalide). Express afficherait sinon un
+// extrait du corps de la requête dans les logs : on répond sans rien journaliser.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Le corps de la requête n\'est pas un JSON valide.' });
+  }
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Requête trop volumineuse.' });
+  }
+  logError(err);
+  return res.status(500).json({ error: 'Erreur serveur' });
 });
 
 // Lancement du serveur (toujours en dernier)

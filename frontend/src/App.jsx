@@ -3,12 +3,37 @@ import './App.css'
 
 const API_URL = import.meta.env.VITE_API_URL
 const MAX_TITLE_LENGTH = 255
+const MAX_ASSIGNEE_LENGTH = 50
+const CONTACT_EMAIL = 'contact@association.example'
+
+// Prénom : lettres (accents compris), espaces, tirets et apostrophes (comme côté API)
+const NAME_PATTERN = /^[\p{L}][\p{L} '’-]*$/u
 
 const FILTERS = [
   { value: 'all', label: 'Toutes' },
   { value: 'pending', label: 'Non complétées' },
   { value: 'completed', label: 'Complétées' },
 ]
+
+// Contrôles du formulaire : ils aident l'utilisateur, l'API revérifie tout de son côté
+function validateTitle(value) {
+  if (value === '') return 'Le titre est obligatoire.'
+  if (value.length > MAX_TITLE_LENGTH) {
+    return `Le titre ne doit pas dépasser ${MAX_TITLE_LENGTH} caractères.`
+  }
+  return ''
+}
+
+function validateAssignee(value) {
+  if (value === '') return '' // facultatif
+  if (value.length > MAX_ASSIGNEE_LENGTH) {
+    return `Le prénom ne doit pas dépasser ${MAX_ASSIGNEE_LENGTH} caractères.`
+  }
+  if (!NAME_PATTERN.test(value)) {
+    return 'Le prénom ne doit contenir que des lettres, espaces, tirets ou apostrophes.'
+  }
+  return ''
+}
 
 // Appel générique à l'API : renvoie le JSON, ou lève une erreur lisible
 async function request(path, options) {
@@ -35,9 +60,12 @@ function App() {
   const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [title, setTitle] = useState('')
+  const [assignee, setAssignee] = useState('')
   const [titleError, setTitleError] = useState('')
+  const [assigneeError, setAssigneeError] = useState('')
   const [message, setMessage] = useState(null) // { type: 'success' | 'error', text }
   const titleInputRef = useRef(null)
+  const assigneeInputRef = useRef(null)
 
   // Charge la liste au démarrage et à chaque changement de filtre
   useEffect(() => {
@@ -69,28 +97,35 @@ function App() {
   async function handleSubmit(event) {
     event.preventDefault()
     const cleanTitle = title.trim()
+    const cleanAssignee = assignee.trim()
 
-    // Contrôle côté formulaire : aide l'utilisateur (l'API revérifie de son côté)
-    if (cleanTitle === '') {
-      setTitleError('Le titre est obligatoire.')
+    const newTitleError = validateTitle(cleanTitle)
+    const newAssigneeError = validateAssignee(cleanAssignee)
+    setTitleError(newTitleError)
+    setAssigneeError(newAssigneeError)
+
+    if (newTitleError) {
       titleInputRef.current.focus()
       return
     }
-    if (cleanTitle.length > MAX_TITLE_LENGTH) {
-      setTitleError(`Le titre ne doit pas dépasser ${MAX_TITLE_LENGTH} caractères.`)
-      titleInputRef.current.focus()
+    if (newAssigneeError) {
+      assigneeInputRef.current.focus()
       return
     }
-    setTitleError('')
 
     try {
       const created = await request('/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: cleanTitle }),
+        // Le prénom n'est envoyé que s'il est renseigné (minimisation)
+        body: JSON.stringify({
+          title: cleanTitle,
+          assignee: cleanAssignee || undefined,
+        }),
       })
       if (matchesFilter(created)) setTasks((previous) => [...previous, created])
       setTitle('')
+      setAssignee('')
       setMessage({ type: 'success', text: `Tâche « ${created.title} » ajoutée.` })
       titleInputRef.current.focus()
     } catch (error) {
@@ -111,6 +146,22 @@ function App() {
         text: `Tâche « ${updated.title} » marquée comme ${
           updated.completed ? 'complétée' : 'non complétée'
         }.`,
+      })
+    } catch (error) {
+      setMessage({ type: 'error', text: toErrorText(error) })
+    }
+  }
+
+  // Droit à l'effacement : retire le prénom sans supprimer la tâche
+  async function handleRemoveAssignee(task) {
+    try {
+      const updated = await request(`/tasks/${task.id}/assignee`, { method: 'DELETE' })
+      setTasks((previous) =>
+        previous.map((item) => (item.id === updated.id ? updated : item))
+      )
+      setMessage({
+        type: 'success',
+        text: `Bénévole retiré de la tâche « ${updated.title} ».`,
       })
     } catch (error) {
       setMessage({ type: 'error', text: toErrorText(error) })
@@ -166,10 +217,44 @@ function App() {
                 </p>
               )}
             </div>
+
+            <div className="field">
+              <label htmlFor="task-assignee">Prénom du bénévole (facultatif)</label>
+              <input
+                id="task-assignee"
+                type="text"
+                ref={assigneeInputRef}
+                value={assignee}
+                onChange={(event) => setAssignee(event.target.value)}
+                maxLength={MAX_ASSIGNEE_LENGTH}
+                autoComplete="off"
+                aria-invalid={assigneeError ? 'true' : 'false'}
+                aria-describedby={
+                  assigneeError
+                    ? 'task-assignee-error privacy-notice'
+                    : 'privacy-notice'
+                }
+              />
+              {assigneeError && (
+                <p id="task-assignee-error" className="field-error">
+                  {assigneeError}
+                </p>
+              )}
+            </div>
+
             <button type="submit" className="button button-primary">
               Ajouter la tâche
             </button>
           </form>
+
+          {/* RGPD : information des personnes (qui, pourquoi, combien de temps, comment) */}
+          <p id="privacy-notice" className="privacy-notice">
+            L’association collecte le prénom saisi uniquement pour savoir quel
+            bénévole s’occupe de la tâche. Il est conservé tant que la tâche existe
+            et supprimé en même temps qu’elle. Pour le faire retirer plus tôt, utilisez
+            le bouton « Retirer le bénévole » ou écrivez à{' '}
+            <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+          </p>
         </section>
 
         <section aria-labelledby="list-heading">
@@ -203,16 +288,33 @@ function App() {
                     checked={task.completed}
                     onChange={() => handleToggle(task)}
                   />
-                  {/* Le titre est affiché comme du texte : React échappe le HTML (pas de XSS) */}
-                  <label htmlFor={`task-${task.id}`}>{task.title}</label>
-                  <button
-                    type="button"
-                    className="button button-danger"
-                    aria-label={`Supprimer la tâche ${task.title}`}
-                    onClick={() => handleDelete(task)}
-                  >
-                    Supprimer
-                  </button>
+                  <div className="task-content">
+                    {/* Affiché comme du texte : React échappe le HTML (pas de XSS) */}
+                    <label htmlFor={`task-${task.id}`}>{task.title}</label>
+                    {task.assignee && (
+                      <span className="task-assignee">Bénévole : {task.assignee}</span>
+                    )}
+                  </div>
+                  <div className="task-actions">
+                    {task.assignee && (
+                      <button
+                        type="button"
+                        className="button button-secondary"
+                        aria-label={`Retirer le bénévole ${task.assignee} de la tâche ${task.title}`}
+                        onClick={() => handleRemoveAssignee(task)}
+                      >
+                        Retirer le bénévole
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="button button-danger"
+                      aria-label={`Supprimer la tâche ${task.title}`}
+                      onClick={() => handleDelete(task)}
+                    >
+                      Supprimer
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

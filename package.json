@@ -1,14 +1,11 @@
 {
-  "name": "tp-3-code",
+  "name": "tp5-api-taches",
   "version": "1.0.0",
-  "description": "Welcome to the VS Code Java world. Here is a guideline to help you get started to write Java code in Visual Studio Code.",
+  "description": "API de gestion de tâches (TP5)",
   "license": "ISC",
   "author": "",
   "type": "commonjs",
-  "main": "index.js",
-  "directories": {
-    "lib": "lib"
-  },
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
