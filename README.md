@@ -66,13 +66,13 @@ docker compose down -v        # arrête tout ET supprime la base (à faire aprè
 
 Mesures mises en place : `lang="fr"` et titre de page, un seul `<h1>`, `<header>` et `<main>`, liste en `<ul>`/`<li>`, chaque champ avec un `<label>` visible, vrais `<button>` avec un nom explicite (`aria-label`), statut d'une tâche par une case à cocher, focus clavier toujours visible, messages de succès en `role="status"` et d'erreur en `role="alert"`, erreur de saisie reliée au champ par `aria-describedby`, contrastes d'au moins 4,5:1 (thèmes clair et sombre, selon la préférence du système), lien d'évitement « Aller au contenu principal », polices système (aucune police externe).
 
-### Lighthouse (score « Accessibilité » : ___ / 100)
+### Lighthouse
 
-![Capture Lighthouse](docs/lighthouse.png)
+![Capture Lighthouse](docs/img/LightHouse.png)
 
-### axe DevTools (erreurs : ___)
+### WAVE
 
-![Capture axe DevTools](docs/axe.png)
+![Capture axe DevTools](docs/img/WAVE.png)
 
 ## Performance
 
