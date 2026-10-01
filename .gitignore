@@ -1,0 +1,10 @@
+# Dépendances
+node_modules/
+
+# Secrets : ne jamais commiter (les fichiers .env.example, eux, sont commités)
+.env
+
+# Journaux et fichiers d'éditeur
+*.log
+.DS_Store
+.idea

@@ -1,0 +1,15 @@
+/* Polices système : aucune police externe chargée (pas de requête vers un tiers) */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-size: 1.125rem;
+  line-height: 1.5;
+  color: #1a1a1a;
+  background: #ffffff;
+}
