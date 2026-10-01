@@ -64,7 +64,7 @@ docker compose down -v        # arrête tout ET supprime la base (à faire aprè
 
 ## Accessibilité
 
-Mesures mises en place : `lang="fr"` et titre de page, un seul `<h1>`, `<header>` et `<main>`, liste en `<ul>`/`<li>`, chaque champ avec un `<label>` visible, vrais `<button>` avec un nom explicite (`aria-label`), statut d'une tâche par une case à cocher, focus clavier toujours visible, messages de succès en `role="status"` et d'erreur en `role="alert"`, erreur de saisie reliée au champ par `aria-describedby`, contrastes d'au moins 4,5:1, polices système (aucune police externe).
+Mesures mises en place : `lang="fr"` et titre de page, un seul `<h1>`, `<header>` et `<main>`, liste en `<ul>`/`<li>`, chaque champ avec un `<label>` visible, vrais `<button>` avec un nom explicite (`aria-label`), statut d'une tâche par une case à cocher, focus clavier toujours visible, messages de succès en `role="status"` et d'erreur en `role="alert"`, erreur de saisie reliée au champ par `aria-describedby`, contrastes d'au moins 4,5:1 (thèmes clair et sombre, selon la préférence du système), lien d'évitement « Aller au contenu principal », polices système (aucune police externe).
 
 ### Lighthouse (score « Accessibilité » : ___ / 100)
 
@@ -73,6 +73,18 @@ Mesures mises en place : `lang="fr"` et titre de page, un seul `<h1>`, `<header>
 ### axe DevTools (erreurs : ___)
 
 ![Capture axe DevTools](docs/axe.png)
+
+## Performance
+
+Aucune police, image ni bibliothèque externe : uniquement du CSS (environ 7 Ko) et React. Mesures : `scrollbar-gutter` pour éviter les décalages de page, `content-visibility` sur les lignes de la liste, transitions limitées aux couleurs et désactivées si l'utilisateur le demande (`prefers-reduced-motion`).
+
+Pour mesurer avec Lighthouse, utiliser la version de production plutôt que `npm run dev` :
+
+```bash
+cd frontend
+npm run build
+npm run preview
+```
 
 ## Sécurité
 
