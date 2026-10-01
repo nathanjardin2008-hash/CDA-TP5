@@ -3,8 +3,6 @@ node_modules
 
 # Secrets : ne jamais commiter (seul .env.example est commité)
 .env
-.env.*
-!.env.example
 
 # Build
 dist
